@@ -6,12 +6,38 @@ app = Flask(__name__)
 STUDENTS = []
 _next = 6
 BOOKS = [
-    {"id": 1, "title": "Clean Code", "author": "Robert C. Martin"},
-    {"id": 2, "title": "API Design Patterns", "author": "JJ Geewax"},
-    {"id": 3, "title": "Designing Data-Intensive Applications", "author": "Martin Kleppmann"},
-    {"id": 4, "title": "Python Crash Course", "author": "Eric Matthes"},
-    {"id": 5, "title": "Fluent Python", "author": "Luciano Ramalho"}
+    {
+        "id": 1,
+        "title": "Clean Code",
+        "author": "Robert C. Martin",
+        "year": 2008
+    },
+    {
+        "id": 2,
+        "title": "API Design Patterns",
+        "author": "JJ Geewax",
+        "year": 2021
+    },
+    {
+        "id": 3,
+        "title": "Designing Data-Intensive Applications",
+        "author": "Martin Kleppmann",
+        "year": 2017
+    },
+    {
+        "id": 4,
+        "title": "Python Crash Course",
+        "author": "Eric Matthes",
+        "year": 2015
+    },
+    {
+        "id": 5,
+        "title": "Fluent Python",
+        "author": "Luciano Ramalho",
+        "year": 2015
+    }
 ]
+
 ORDERS = {}
 def find_by_id(book_id):
     return next((b for b in BOOKS if b["id"] == book_id), None)
@@ -55,6 +81,9 @@ def list_books():
     limit = request.args.get("limit", 20, type=int)
     q = request.args.get("q", "").strip().lower()
     items = [b for b in BOOKS if q in b["title"].lower()]
+    sort = request.args.get("sort")
+    if sort == "title":
+        items = sorted(items, key=lambda b: b["title"].lower())
     l_items = items[:limit]
     return jsonify({"items": l_items}), 200
 
@@ -63,9 +92,12 @@ def create_book():
     global _next
     body = request.get_json(silent=True) or {}
     t,a = body.get("title"), body.get("author")
+    year = body.get("year")
     if not t or not a:
         return jsonify({"error": "need title + author"}), 400
-    book = {"id":_next, "title": t, "author": a}
+    if not isinstance(year, int) or year < 1900:
+        return jsonify({"error": "year >= 1900"}), 400
+    book = {"id":_next, "title": t, "author": a, "year": year}
     _next += 1
     BOOKS.append(book)
     return jsonify(book), 201, {"Location":f"/books/{book['id']}"}
@@ -75,6 +107,11 @@ def modify_book(id):
     book = find_by_id(id)
     if not book: return {"error":"not found"}, 404
     if request.method == "PUT":
+        body = request.get_json(silent=True) or {}
+        if "year" in body:
+            year = body["year"]
+            if not isinstance(year, int) or year < 1900:
+                return jsonify({"error": "year must be an integer >= 1900"}), 400
         book.update(request.get_json(silent=True) or {})
         return jsonify(book), 200
     BOOKS.remove(book)
