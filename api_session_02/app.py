@@ -1,5 +1,7 @@
 from flask import Flask, jsonify, request, make_response
 import sqlite3
+import hashlib
+import json
 
 app = Flask(__name__)
 DEFAULT_SIZE, MAX_SIZE = 20, 100
@@ -26,6 +28,14 @@ def get_db():
     db = sqlite3.connect("books.db")
     db.row_factory = sqlite3.Row
     return db
+
+def make_etag(book):
+    content = json.dumps(
+        book,
+        sort_keys=True
+    ).encode("utf-8")
+
+    return hashlib.sha256(content).hexdigest()
 
 @app.get("/books")
 def list_books():
@@ -88,8 +98,14 @@ def fetch(bid):
     db.close()
     if row is None:
         return jsonify(error="not found"), 404
+    etag = make_etag(dict(row))
+    client_etag = request.headers.get("If-None-Match")
+    if client_etag == f'"{etag}"':
+        return "", 304
     resp = make_response(jsonify(dict(row)), 200)
-    resp.headers["Cache-Control"] = "max-age=60"; return resp
+    resp.headers["Cache-Control"] = "max-age=60"
+    resp.headers["ETag"] = etag
+    return resp
 
 @app.put("/books/<int:bid>")
 def put(bid):
