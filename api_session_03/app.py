@@ -1,5 +1,6 @@
 from flask import Flask, jsonify, request, make_response
 from errors import ApiProblem, _problem
+import base64
 
 app = Flask(__name__)
 
@@ -10,7 +11,14 @@ USERS = [
     {"id": 2, "name": "Bob"},
     {"id": 3, "name": "Charlie"},
 ]
-
+ORDERS = [
+    {"id": 1, "customer_id": 101, "status": "paid", "total": 120},
+    {"id": 2, "customer_id": 102, "status": "pending", "total": 80},
+    {"id": 3, "customer_id": 101, "status": "paid", "total": 250},
+    {"id": 4, "customer_id": 103, "status": "cancelled", "total": 50},
+    {"id": 5, "customer_id": 102, "status": "paid", "total": 300},
+    {"id": 6, "customer_id": 101, "status": "pending", "total": 90},
+]
 
 @app.get("/api/v1/posts")
 def list_posts():
@@ -77,6 +85,52 @@ def get_user(id):
 
     return jsonify(user)
 
+def encode_cursor(index):
+    return base64.b64encode(str(index).encode()).decode()
+
+
+def decode_cursor(cursor):
+    try:
+        return int(base64.b64decode(cursor).decode())
+    except:
+        return None
+
+
+@app.get("/orders")
+def get_orders():
+    orders = ORDERS.copy()
+    status = request.args.get("status")
+    customer_id = request.args.get("customer_id")
+
+    if status:
+        orders = [o for o in orders if o["status"] == status]
+
+    if customer_id:
+        orders = [o for o in orders if o["customer_id"] == int(customer_id)]
+
+    sort = request.args.get("sort")
+    if sort:
+        orders.sort(key=lambda o: o[sort])
+    limit = int(request.args.get("limit", 5))
+    cursor = request.args.get("cursor")
+    start = 0
+
+    if cursor:
+        start = decode_cursor(cursor)
+        if start is None:
+            return jsonify(error="invalid cursor"), 400
+
+    items = orders[start:start + limit]
+    next_cursor = None
+    if start + limit < len(orders):
+        next_cursor = encode_cursor(start + limit)
+
+    fields = request.args.get("fields")
+    if fields:
+        fields = fields.split(",")
+        items = [{key: value for key, value in order.items() if key in fields} for order in items]
+
+    return jsonify({"data": items, "next_cursor": next_cursor})
 
 if __name__ == "__main__":
     app.run(host="127.0.0.1", port=5000, debug=True)
