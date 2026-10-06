@@ -1,4 +1,4 @@
-Lab_1:
+## Lab_1:
 ### 1. Xác định resources trong miền
 Các resource chính:
 - users: người dùng
@@ -46,3 +46,7 @@ GET /api/v1/users/{user_id}/following
 
 ### 3. Sơ đồ cây endpoint
 ![Sodocay](sodo.jpeg)
+
+## Lab_2:
+### RESPONSE 404 Not Found
+![ketqua](lab2.jpeg)
