@@ -1,0 +1,175 @@
+openapi: 3.0.3
+
+info: {title: Tasks API, version: 1.0.0}
+
+servers:
+  - url: http://localhost:5000/v1
+
+security:
+  - bearerAuth: []
+
+paths:
+
+  /tasks:
+    get:
+      tags: [tasks]
+      operationId: listTasks
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/StatusFilter'
+      responses:
+        '200': {$ref: '#/components/responses/Success'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+
+    post:
+      tags: [tasks]
+      operationId: createTask
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/TaskInput'}
+      responses:
+        '201': {$ref: '#/components/responses/Created'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+
+
+  /tasks/{taskId}:
+    parameters:
+      - $ref: '#/components/parameters/TaskId'
+
+    get:
+      tags: [tasks]
+      operationId: getTaskById
+      responses:
+        '200': {$ref: '#/components/responses/Success'}
+        '404': {$ref: '#/components/responses/NotFound'}
+
+    patch:
+      tags: [tasks]
+      operationId: updateTask
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/TaskInput'}
+      responses:
+        '200': {$ref: '#/components/responses/Success'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+
+    delete:
+      tags: [tasks]
+      operationId: deleteTask
+      responses:
+        '204':
+          description: Xóa task thành công
+        '404': {$ref: '#/components/responses/NotFound'}
+
+
+components:
+
+  parameters:
+    TaskId:
+      name: taskId
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+
+    Limit:
+      name: limit
+      in: query
+      schema: {type: integer, default: 10, maximum: 100}
+
+    StatusFilter:
+      name: status
+      in: query
+      schema: {type: string, enum: [open, done]}
+
+
+  schemas:
+    Task:
+      type: object
+      required: [id, title]
+      properties:
+        id: {type: string, format: uuid}
+        title: {type: string}
+        status: {type: string, enum: [open, done]}
+        priority: {type: string, enum: [low, normal, high]}
+        dueDate: {type: string, format: date}
+        assigneeId: {type: string, format: uuid}
+      example:
+        id: "550e8400-e29b-41d4-a716-446655440000"
+        title: "Học OpenAPI"
+        status: open
+        priority: high
+        dueDate: "2026-10-15"
+
+    TaskInput:
+      type: object
+      properties:
+        title: {type: string}
+        status: {type: string, enum: [open, done]}
+        priority: {type: string, enum: [low, normal, high]}
+        dueDate: {type: string, format: date}
+        assigneeId: {type: string, format: uuid}
+      example:
+        title: "Học OpenAPI"
+        status: open
+        priority: high
+
+    SuccessResponse:
+      type: object
+      properties:
+        success: {type: boolean, example: true}
+        data:
+          oneOf:
+            - $ref: '#/components/schemas/Task'
+            - type: array
+              items: {$ref: '#/components/schemas/Task'}
+
+    ErrorResponse:
+      type: object
+      properties:
+        success: {type: boolean, example: false}
+        message: {type: string, example: "Task not found"}
+
+
+  responses:
+    Success:
+      description: Thao tác thành công
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/SuccessResponse'}
+
+    Created:
+      description: Tạo task thành công
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/SuccessResponse'}
+
+    Unauthorized:
+      description: Chưa xác thực
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorResponse'}
+
+    NotFound:
+      description: Không tìm thấy task
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorResponse'}
+
+    ValidationError:
+      description: Dữ liệu không hợp lệ
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorResponse'}
+
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
