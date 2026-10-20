@@ -1,0 +1,33 @@
+{
+  "type": "object",
+  "required": [
+    "id",
+    "title",
+    "isbn",
+    "author_ids"
+  ],
+  "properties": {
+    "id": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "isbn": {
+      "type": "string",
+      "pattern": "^[0-9]{13}$"
+    },
+    "author_ids": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    }
+  },
+  "additionalProperties": false
+}

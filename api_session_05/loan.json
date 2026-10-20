@@ -1,0 +1,41 @@
+{
+  "type": "object",
+  "required": [
+    "id",
+    "copy_id",
+    "member_id",
+    "borrowed_at",
+    "due_at",
+    "returned_at"
+  ],
+  "properties": {
+    "id": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "copy_id": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "member_id": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "borrowed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "due_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "returned_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": false
+}
