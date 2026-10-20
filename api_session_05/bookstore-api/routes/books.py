@@ -18,11 +18,42 @@ with schema_path.open(encoding="utf-8") as file:
     book_schema = json.load(file)
     book_patch_schema = {**book_schema, "required": [], "minProperties": 1}
 
+SORT = {
+    "id": Book.id,
+    "price": Book.price_vnd,
+}
+
+
+def parse_sort(raw):
+    desc = raw.startswith("-")
+    key = raw.lstrip("-")
+
+    if key not in SORT:
+        return None, "bad_sort", 400
+
+    p = SORT[key]
+
+    cols = [
+        p.desc() if desc else p.asc(),
+        Book.id.desc() if desc else Book.id.asc(),
+    ]
+
+    return p, cols, desc
+
 @books_bp.get("")
 def list_books():
-    statement = db.select(Book).order_by(Book.id)
-    books = db.session.execute(statement).scalars().all()
+    sort = request.args.get("sort", "-id")
+    category_id = request.args.get("category", type=int)
+    p, cols, desc = parse_sort(sort)
+    if p is None:
+        return jsonify({"error": cols}), 400
+    statement = db.select(Book).order_by(*cols)
 
+    if category_id is not None:
+        statement = statement.where(
+            Book.category_id == category_id
+        )
+    books = db.session.scalars(statement).all()
     return jsonify([book.to_dict() for book in books])
 
 @books_bp.get("/<int:book_id>")
