@@ -1,0 +1,302 @@
+{
+  "info": {
+    "name": "Bookstore API - B5",
+    "description": "Collection kiểm thử Offset/Cursor Pagination, Genre Filter, Multi-key Sort và JSON Schema Validation.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "cursor",
+      "value": ""
+    },
+    {
+      "key": "category_id",
+      "value": "1"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. List Books (Offset + Genre Filter + Multi-key Sort)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test(\"Strategy is offset and has pagination info\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.page.strategy).to.eql(\"offset\");",
+              "    pm.expect(jsonData.page).to.have.property(\"next_offset\");",
+              "    pm.expect(jsonData.data).to.be.an(\"array\");",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:5000/api/v1/books?strategy=offset&genre=tech&sort=-price,title&offset=0&limit=2",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "5000",
+          "path": [
+            "api",
+            "v1",
+            "books"
+          ],
+          "query": [
+            {
+              "key": "strategy",
+              "value": "offset"
+            },
+            {
+              "key": "genre",
+              "value": "tech"
+            },
+            {
+              "key": "sort",
+              "value": "-price,title"
+            },
+            {
+              "key": "offset",
+              "value": "0"
+            },
+            {
+              "key": "limit",
+              "value": "2"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "2. List Books (Cursor - Page 1)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "var jsonData = pm.response.json();",
+              "pm.test(\"Cursor pagination info is valid\", function () {",
+              "    pm.expect(jsonData.page.strategy).to.eql(\"cursor\");",
+              "    if (jsonData.page.more) {",
+              "        pm.expect(jsonData.page.next).to.be.a(\"string\").and.not.empty;",
+              "    } else {",
+              "        pm.expect(jsonData.page.next).to.eql(null);",
+              "    }",
+              "});",
+              "pm.collectionVariables.set(\"cursor\", jsonData.page.next || \"\");"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:5000/api/v1/books?strategy=cursor&sort=-price&limit=1",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "5000",
+          "path": [
+            "api",
+            "v1",
+            "books"
+          ],
+          "query": [
+            {
+              "key": "strategy",
+              "value": "cursor"
+            },
+            {
+              "key": "sort",
+              "value": "-price"
+            },
+            {
+              "key": "limit",
+              "value": "1"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "3. List Books (Cursor - Page 2)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "if (!pm.collectionVariables.get(\"cursor\")) {",
+              "    pm.execution.skipRequest();",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:5000/api/v1/books?strategy=cursor&sort=-price&limit=1&cursor={{cursor}}",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "5000",
+          "path": [
+            "api",
+            "v1",
+            "books"
+          ],
+          "query": [
+            {
+              "key": "strategy",
+              "value": "cursor"
+            },
+            {
+              "key": "sort",
+              "value": "-price"
+            },
+            {
+              "key": "limit",
+              "value": "1"
+            },
+            {
+              "key": "cursor",
+              "value": "{{cursor}}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "4. Create Book (Valid JSON Schema)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "pm.variables.set(\"test_isbn\", Date.now().toString());"
+            ],
+            "type": "text/javascript"
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 201\", function () {",
+              "    pm.response.to.have.status(201);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"Microservices Patterns\",\n  \"isbn\": \"{{test_isbn}}\",\n  \"price_vnd\": 420000,\n  \"stock\": 10,\n  \"category_id\": {{category_id}}\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "http://localhost:5000/api/v1/books",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "5000",
+          "path": [
+            "api",
+            "v1",
+            "books"
+          ]
+        }
+      }
+    },
+    {
+      "name": "5. Create Book (Invalid Schema - Expect 400)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 400\", function () {",
+              "    pm.response.to.have.status(400);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"Invalid Book\",\n  \"price_vnd\": -5000\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "http://localhost:5000/api/v1/books",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "5000",
+          "path": [
+            "api",
+            "v1",
+            "books"
+          ]
+        }
+      }
+    }
+  ]
+}

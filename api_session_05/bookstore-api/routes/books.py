@@ -5,7 +5,7 @@ from pathlib import Path
 
 from flask import Blueprint, jsonify, request
 from jsonschema import validate, ValidationError
-from sqlalchemy import select, tuple_
+from sqlalchemy import select, and_, or_
 from sqlalchemy.exc import IntegrityError
 
 from models import db, Book, Category, Review
@@ -24,83 +24,121 @@ with schema_path.open(encoding="utf-8") as file:
 SORT = {
     "id": Book.id,
     "price": Book.price_vnd,
+    "title": Book.title,
 }
 
 
 def parse_sort(raw):
-    desc = raw.startswith("-")
-    key = raw.lstrip("-")
+    keys = []
 
-    if key not in SORT:
-        return None, "bad_sort", 400
+    for field in raw.split(","):
+        desc = field.startswith("-")
+        name = field[1:] if desc else field
 
-    p = SORT[key]
-    cols = [p.desc() if desc else p.asc(),Book.id.desc() if desc else Book.id.asc()]
+        if name not in SORT:
+            raise ValueError("Sort không hợp lệ")
 
-    return p, cols, desc
+        keys.append((SORT[name], desc))
 
-def _enc(s):
-    return base64.urlsafe_b64encode(json.dumps(s).encode()).decode().rstrip("=")
+    if not any(p.key == "id" for p, desc in keys):
+        keys.append((Book.id, False))
 
-def apply_cursor(q, raw, sort, p, desc):
+    return keys
+
+
+def _enc(data):
+    return base64.urlsafe_b64encode(json.dumps(data).encode()).decode()
+
+def apply_cursor(q, raw, sort, keys):
     if not raw:
-        return q, None, 200
+        return q
 
-    pad = "=" * (-len(raw) % 4)
-    c = json.loads(base64.urlsafe_b64decode(raw + pad))
+    c = json.loads(base64.urlsafe_b64decode(raw))
 
-    if c.get("s") != sort:
-        return None, "sort_chg", 400
+    if c["sort"] != sort:
+        raise ValueError("Không được đổi sort khi dùng cursor")
 
-    v, i = c["v"], c["i"]
-    op = "<" if desc else ">"
-    condition = tuple_(p, Book.id).op(op)((v, i))
+    if len(c["values"]) != len(keys):
+        raise ValueError("Cursor không hợp lệ")
 
-    return q.filter(condition), None, 200
+    conditions = []
+    equal = []
 
+    for (p, desc), value in zip(keys, c["values"]):
+        comparison = p < value if desc else p > value
+        conditions.append(and_(*equal, comparison))
+        equal.append(p == value)
 
-def build_response(items, lim, sort, p, more):
-    nxt = None
+    return q.where(or_(*conditions))
 
-    if items and more:
-        last = items[-1]
-
-        nxt = _enc({
-            "s": sort,
-            "v": getattr(last, p.key),
-            "i": last.id,
-        })
-
-    return jsonify({
-        "data": [b.to_dict() for b in items],
-        "page": {
-            "next": nxt,
-            "more": more,
-        },
-    })
 
 @books_bp.get("")
 def list_books():
-    raw = request.args.get("cursor")
-    lim = min(request.args.get("limit", 20, type=int), 100)
-
+    strategy = request.args.get("strategy", "cursor")
     sort = request.args.get("sort", "-id")
-    cat = request.args.get("category", type=int)
+    genre = request.args.get("genre")
+    cursor = request.args.get("cursor")
 
-    p, cols, desc = parse_sort(sort)
-    if p is None:
-        return cols, 400
+    if strategy not in ("offset", "cursor"):
+        return {"error": "Strategy không hợp lệ"}, 400
 
-    q = select(Book).order_by(*cols)
-    if cat:
-        q = q.filter(Book.category_id == cat)
+    try:
+        limit = int(request.args.get("limit", 20))
+        offset = int(request.args.get("offset", 0))
+        keys = parse_sort(sort)
+    except ValueError:
+        return {"error": "Tham số không hợp lệ"}, 400
 
-    q, err, code = apply_cursor(q, raw, sort, p, desc)
-    if err:
-        return {"e": err}, code
+    if limit < 1 or offset < 0:
+        return {"error": "Limit hoặc offset không hợp lệ"}, 400
 
-    rows = db.session.scalars(q.limit(lim + 1)).all()
-    return build_response(rows[:lim], lim, sort, p, len(rows) > lim)
+    limit = min(limit, 100)
+
+    q = select(Book).order_by(*[
+        p.desc() if desc else p.asc()
+        for p, desc in keys
+    ])
+
+    if genre:
+        q = q.join(Book.category).where(Category.slug == genre)
+
+    if strategy == "offset":
+        q = q.offset(offset)
+    else:
+        try:
+            q = apply_cursor(q, cursor, sort, keys)
+        except (ValueError, KeyError, TypeError, binascii.Error):
+            return {"error": "Cursor không hợp lệ hoặc sort đã đổi"}, 400
+
+    rows = db.session.scalars(q.limit(limit + 1)).all()
+    items = rows[:limit]
+    more = len(rows) > limit
+
+    next_cursor = None
+    next_offset = None
+
+    if more:
+        if strategy == "cursor":
+            last = items[-1]
+            next_cursor = _enc({
+                "sort": sort,
+                "values": [
+                    getattr(last, p.key)
+                    for p, desc in keys
+                ],
+            })
+        else:
+            next_offset = offset + limit
+
+    return jsonify({
+        "data": [book.to_dict() for book in items],
+        "page": {
+            "strategy": strategy,
+            "next": next_cursor,
+            "next_offset": next_offset,
+            "more": more,
+        },
+    })
 
 @books_bp.get("/<int:book_id>")
 def get_book(book_id):
