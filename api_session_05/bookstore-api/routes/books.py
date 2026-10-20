@@ -1,8 +1,11 @@
 import json
+import base64
+import binascii
 from pathlib import Path
 
 from flask import Blueprint, jsonify, request
 from jsonschema import validate, ValidationError
+from sqlalchemy import select, tuple_
 from sqlalchemy.exc import IntegrityError
 
 from models import db, Book, Category, Review
@@ -32,29 +35,72 @@ def parse_sort(raw):
         return None, "bad_sort", 400
 
     p = SORT[key]
-
-    cols = [
-        p.desc() if desc else p.asc(),
-        Book.id.desc() if desc else Book.id.asc(),
-    ]
+    cols = [p.desc() if desc else p.asc(),Book.id.desc() if desc else Book.id.asc()]
 
     return p, cols, desc
 
+def _enc(s):
+    return base64.urlsafe_b64encode(json.dumps(s).encode()).decode().rstrip("=")
+
+def apply_cursor(q, raw, sort, p, desc):
+    if not raw:
+        return q, None, 200
+
+    pad = "=" * (-len(raw) % 4)
+    c = json.loads(base64.urlsafe_b64decode(raw + pad))
+
+    if c.get("s") != sort:
+        return None, "sort_chg", 400
+
+    v, i = c["v"], c["i"]
+    op = "<" if desc else ">"
+    condition = tuple_(p, Book.id).op(op)((v, i))
+
+    return q.filter(condition), None, 200
+
+
+def build_response(items, lim, sort, p, more):
+    nxt = None
+
+    if items and more:
+        last = items[-1]
+
+        nxt = _enc({
+            "s": sort,
+            "v": getattr(last, p.key),
+            "i": last.id,
+        })
+
+    return jsonify({
+        "data": [b.to_dict() for b in items],
+        "page": {
+            "next": nxt,
+            "more": more,
+        },
+    })
+
 @books_bp.get("")
 def list_books():
+    raw = request.args.get("cursor")
+    lim = min(request.args.get("limit", 20, type=int), 100)
+
     sort = request.args.get("sort", "-id")
-    category_id = request.args.get("category", type=int)
+    cat = request.args.get("category", type=int)
+
     p, cols, desc = parse_sort(sort)
     if p is None:
-        return jsonify({"error": cols}), 400
-    statement = db.select(Book).order_by(*cols)
+        return cols, 400
 
-    if category_id is not None:
-        statement = statement.where(
-            Book.category_id == category_id
-        )
-    books = db.session.scalars(statement).all()
-    return jsonify([book.to_dict() for book in books])
+    q = select(Book).order_by(*cols)
+    if cat:
+        q = q.filter(Book.category_id == cat)
+
+    q, err, code = apply_cursor(q, raw, sort, p, desc)
+    if err:
+        return {"e": err}, code
+
+    rows = db.session.scalars(q.limit(lim + 1)).all()
+    return build_response(rows[:lim], lim, sort, p, len(rows) > lim)
 
 @books_bp.get("/<int:book_id>")
 def get_book(book_id):
