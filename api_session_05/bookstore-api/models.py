@@ -50,6 +50,10 @@ class Book(db.Model):
         return {
             "id": f"book_{self.id}",
             "title": self.title,
+            "isbn": self.isbn,
+            "price_vnd": self.price_vnd,
+            "stock": self.stock,
+            "category_id": self.category_id,
         }
 
 
