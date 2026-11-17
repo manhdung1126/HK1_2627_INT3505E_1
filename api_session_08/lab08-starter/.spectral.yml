@@ -1,0 +1,48 @@
+extends: spectral:oas
+
+
+rules:
+  info-contact: off
+  operation-description: off
+  operation-tags: off
+
+  no-content-on-204:
+    description: Response 204 must not have content
+    severity: error
+    given: "$.paths[*][*].responses['204']"
+    then:
+      field: content
+      function: undefined
+
+  book-year-type:
+    description: Book.year must be an integer
+    severity: error
+    given: "$.components.schemas.Book.properties.year"
+    then:
+      field: type
+      function: enumeration
+      functionOptions:
+        values:
+          - integer
+
+  response-200-schema:
+    description: Response 200 must have a non-empty schema
+    severity: error
+    given: "$.paths[*][*].responses['200']"
+    then:
+      function: schema
+      functionOptions:
+        schema:
+          type: object
+          required: [content]
+          properties:
+            content:
+              type: object
+              minProperties: 1
+              additionalProperties:
+                type: object
+                required: [schema]
+                properties:
+                  schema:
+                    type: object
+                    minProperties: 1
